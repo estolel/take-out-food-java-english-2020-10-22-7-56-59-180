@@ -1,5 +1,4 @@
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -19,20 +18,98 @@ public class App {
         App app = startApp();
         String receipt = "";
         int promoIndex;
-        List<CartItem> finalCart = new ArrayList<>();
+        Double total = 0.0;
 
         AtomicReference<Double> cartTotal = new AtomicReference<>(0.0);
         Map cart = getCart(inputs);
         inputs = (List<String>) cart.keySet().stream().collect(Collectors.toList());
 
         final List<String> finalInputList = generateFinalInputList(inputs);
-        generateFinalCart(finalCart, cart, finalInputList);
+        final List<CartItem> finalCart = generateFinalCart(new ArrayList<>(), cart, finalInputList);
+
+        Double totalCost = calculateTotalCost(finalCart);
+        Double totalDiscountedPrice = calculateCostWithHalfPromo(finalCart, totalCost);
+        Double saved = 0.0;
+        boolean isMoreThan30Yuan = totalCost>=30;
+        String activeDiscount="";
+
+        if(totalDiscountedPrice < totalCost){
+            activeDiscount = salesPromoService.findAll().get(1).getDisplayName();
+            saved = totalCost-totalDiscountedPrice;
+            totalCost = totalDiscountedPrice;
+        }else if (isMoreThan30Yuan) {
+            if (totalCost - 6 < totalDiscountedPrice) {
+                activeDiscount = salesPromoService.findAll().get(0).getDisplayName()+" ";
+                totalCost -= 6;
+                saved = 6.0;
+            }
+        }
+
+        receipt = buildReceipt(receipt, finalCart, totalCost, saved, activeDiscount);
 
         return receipt;
     }
 
-    private void generateFinalCart(List<CartItem> finalCart, Map cart, List<String> finalInputList) {
+    private String buildReceipt(String receipt, List<CartItem> finalCart, Double totalCost, Double saved, String activeDiscount) {
+        receipt+=Constants.HEADER+"\n";
+        String items = "";
+        for (CartItem cartItem:finalCart) {
+            items+=cartItem.getName()+Constants.ITEM_COUNT+cartItem.amount+" = "+new Double(cartItem.getPrice()*cartItem.amount).intValue()+" "+Constants.YUAN+"\n";
+        }
+        receipt+=items;
+        receipt+=Constants.SEPARATOR+"\n";
+        if(!activeDiscount.equals("")){
+            receipt += Constants.PROMO_USED + "\n";
+            receipt += getListedDiscount(saved, activeDiscount, finalCart);
+            receipt += Constants.SEPARATOR + "\n";
+        }
+        receipt+=Constants.TOTAL+totalCost.intValue()+" "+Constants.YUAN+ "\n";
+        receipt+=Constants.FOOTER;
+        return receipt;
+    }
+
+    private String getListedDiscount(Double saved, String activeDiscount, List<CartItem> finalCart) {
+        if(activeDiscount.contains("Half")){
+            String listedDiscount = salesPromoService.findAll().get(1).getDisplayName()+" (";
+            List<String> discountedItems = new ArrayList<>();
+            List<CartItem> discountedCartItems = finalCart.stream().filter(cartItem -> {return cartItem.possiblePromos.size()>0;}).collect(Collectors.toList())
+                    .stream().filter(cartItem -> cartItem.possiblePromos.get(0).getDisplayName().contains("Half")).collect(Collectors.toList());
+            for (CartItem cartItem: discountedCartItems) {
+                discountedItems.add(cartItem.getName());
+            }
+            listedDiscount+= discountedItems.stream().collect(Collectors.joining(", "))+"),"+Constants.SAVED+saved.intValue()+" "+Constants.YUAN+"\n";
+            return  listedDiscount;
+        }
+        return activeDiscount + ", saving " + saved.intValue() + " " + Constants.YUAN + "\n";
+    }
+
+    private Double calculateTotalCost(List<CartItem> finalCart) {
+        Double totalCost = 0.0;
+        for (CartItem cartItem: finalCart) {
+            totalCost+=cartItem.amount*cartItem.getPrice();
+        }
+        return totalCost;
+    }
+
+    private Double calculateCostWithHalfPromo(List<CartItem> finalCart, Double totalCost) {
+        Double totalCostWithHalfPromo = 0.0;
+        for (CartItem cartItem : finalCart) {
+            Double cost = cartItem.amount * cartItem.getPrice();
+            if((cartItem.possiblePromos.size()>0)){
+                if (cartItem.possiblePromos.get(0).getType().equals(salesPromoService.findAll().get(1).getType()))
+                    totalCostWithHalfPromo += (cost) / 2;
+            }
+            else
+                totalCostWithHalfPromo += cost;
+        }
+
+        return totalCostWithHalfPromo==0.0?totalCost:totalCostWithHalfPromo;
+    }
+
+
+    private List<CartItem> generateFinalCart(List<CartItem> finalCart, Map cart, List<String> finalInputList) {
         App app;
+        finalInputList = finalInputList.stream().sorted().collect(Collectors.toList());
         try{
         finalInputList.forEach(input -> {
             List<SalesPromotion> possiblePromos = new ArrayList<>();
@@ -48,12 +125,14 @@ public class App {
               return salesPromotion.getRelatedItems().contains(input);
             }).collect(Collectors.toList());
             finalCart.add(new CartItem(id, name, price, possiblePromos,amount));
-            System.out.println(possiblePromos);
         });
+
         }catch(NumberFormatException e){
             System.out.println("INVALID INPUT!\nPlease try again");
             app = startApp();
         }
+
+    return finalCart;
     }
 
     private static App startApp() {

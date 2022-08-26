@@ -9,7 +9,7 @@ public class Constants {
     public static final String DISCOUNTED_PRICE = "Discounted total:";
     public static final String YUAN = "yuan";
     public static final String ITEM_COUNT = " x ";
-    public static final String TOTAL = "Total: ";
+    public static final String TOTAL = "In total: ";
     public static final String SAVED = " saving ";
 
 
