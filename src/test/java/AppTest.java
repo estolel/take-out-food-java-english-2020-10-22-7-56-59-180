@@ -11,12 +11,6 @@ import static org.junit.Assert.*;
 
 public class AppTest {
 
-    @Test
-    public void outputSalesRepo(){
-
-        System.out.println(new App(new ItemService(), new SalesPromoService()).bestCharge(Arrays.asList("ITEM0022 x 52")));
-
-    }
 
     @Test
     public void should_use_50_percentage_sales_promotion(){
